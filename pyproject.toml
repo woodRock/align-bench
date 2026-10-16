@@ -81,7 +81,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["alignbench", "conftest"]
+known-first-party = ["alignbench", "conftest", "golden", "synth"]
 
 [tool.mypy]
 python_version = "3.11"

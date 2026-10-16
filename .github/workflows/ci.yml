@@ -21,6 +21,7 @@ env:
   PYTHON_VERSION: '3.11'
   RUFF_VERSION: '0.17.0'
   MYPY_VERSION: '2.4.0'
+  TORCH_VERSION: '2.7.1'  # golden job only (warpalign needs torch); same as joint-align's CI
 
 jobs:
   lint:
@@ -58,7 +59,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
           cache-dependency-path: pyproject.toml
-      - run: pip install -e ".[dev]"
+      - run: pip install -e ".[dev]" -c tests/golden/constraints.txt
       - name: Run tests with coverage
         run: python -m coverage run -m pytest --junitxml=junit.xml
       - name: Coverage report (fails under the threshold in pyproject.toml)
@@ -71,6 +72,32 @@ jobs:
         with:
           name: test-results
           path: junit.xml
+
+  golden:
+    name: Golden (live, pinned upstreams)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      # The [golden] extra pulls in torch through warpalign: CPU wheels, no CUDA download.
+      - run: pip install torch==$TORCH_VERSION --index-url https://download.pytorch.org/whl/cpu
+      - run: pip install -e ".[dev,golden]" -c tests/golden/constraints.txt
+      - name: Record upstream revisions
+        run: python -c "import importlib.metadata as m; [print(d, m.distribution(d).read_text('direct_url.json')) for d in ('warpalign', 'joint-align', 'trustalign')]"
+      - run: python -m pytest tests/test_golden.py -v -rs
+      # This platform's fixture, for committing when the pins or constraints change (see CLAUDE.md).
+      - if: always()
+        run: python scripts/00_make_golden.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: golden-fixtures-linux
+          path: tests/golden/*.npz
 
   package:
     name: Package (non-editable install)

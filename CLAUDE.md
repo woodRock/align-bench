@@ -30,7 +30,8 @@ Outside the venv, always call `python3.11` explicitly (`python3` is a zsh alias 
 expanded under `nohup`). Markers: `slow` (end-to-end) and `real` (needs the private data under
 `data/fish_oil`; skipped otherwise).
 
-## Architecture (target; see the handover plan, milestones M0–M5)
+## Architecture (M1 done: axis, data, datasets/fish_oil + registry, anchors.match_pooled, warps,
+methods/tic, metrics/{tic,stats,diagnostics}; the rest is the target of M2–M4)
 
 - `axis.py`: `TimeAxis(n_bins, run_min, eval_start_min)`, `FISH_OIL_AXIS = (200, 45.0, 5.0)`. The
   time axis is a value, never a module global. Functions that used `N_BINS`/`BIN_MIN`/`EVAL_BINS`
@@ -42,9 +43,25 @@ expanded under `nohup`). Markers: `slow` (end-to-end) and `real` (needs the priv
   to their origin: `match_pooled` (= `warpalign.anchors.extract_anchors`, integer bins) and `harvest`
   (= `jointalign.multibatch.harvest_anchors`, sub-bin, every cross-batch sample pair). Settings in a
   frozen `MatchConfig` whose defaults are today's constants.
+- `methods/tic.py`: COW-TIC, icoshift. Anchor warps (constant shift, linear, PCHIP) are in
+  `warps.py`. warpalign's `evaluation.anchor_warp`/`unaligned` (PairEval) become the B-frame
+  protocol in M3; until then `tests/golden.py` composes them from the moved pieces.
 - `warps.py`, `maps.py` (`CorrespondenceMap` protocol + adapters), `methods/` (`Aligner`, `Fit`,
   registry, built-in baselines), `metrics/` (tic, protocols, truth, anchors, stats),
   `provenance.py`, `bench.py`, `cli.py`.
+
+## Golden tests
+
+`tests/golden.py` holds one case builder (`build_warpalign(api)`) and two APIs mapping the same
+names to the pinned upstream functions or to alignbench's. `scripts/00_make_golden.py` runs it
+against upstream and writes `tests/golden/<pkg>_<commit8>.<system>-<machine>.npz` (one per platform: macOS and Linux BLAS differ in the last bits; CI uploads the Linux one as an artifact) (flattened outputs, `#source`
+commit, `#env` platform + numpy/scipy/sklearn versions). `tests/test_golden.py` runs it against
+alignbench and compares with `np.array_equal`, dtype and shape included. Bit-identity is only
+expected on the platform and versions in `#env`; CI pins the versions with
+`tests/golden/constraints.txt`, and its `golden` job also compares against the live pinned
+upstreams (strict on any platform). Adding a moved function = add its calls to the builder (both
+APIs), regenerate, commit the fixture. Synthetic inputs come from `tests/synth.py`; their digests
+are in the fixture, so a numpy RNG change fails loudly.
 
 ## Decisions (from Jesse, 2026-10-17)
 
