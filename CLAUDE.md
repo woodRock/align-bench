@@ -113,7 +113,9 @@ Jesse's real-data `../joint-align/results/fair_benchmark.npz` (also 60/60 bit-id
 
 Merged and tagged: warpalign v3.0.0 (2411143; the WarpTransformer plugin), joint-align v2.0.0
 (132ecb4; joint/star/composed-pairwise/neural-joint plugins, site updated), trustalign v0.2.0
-(fc84fe6). All three pin alignbench 879510f. Jesse's global python3.11 has editable installs of all
+(fc84fe6). All three pin alignbench 879510f. Tidy follow-ups: warpalign v3.0.1 (its tests of the
+moved code now live here as tests/test_ported_*.py; scripts/archive removed), joint-align v2.0.1
+(script 31 and the tutorial on alignbench), trust-align CI only; every repo uses actions v7. Jesse's global python3.11 has editable installs of all
 four repos (alignbench and the three installed with --no-deps). When alignbench changes in a way a
 downstream should follow: bump that repo's pin (and the others', so they stay on one commit) on a
 branch + PR, as before. Known reproducibility facts: the neural joint's CPU training is not
