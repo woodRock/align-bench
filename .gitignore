@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+/build/
+/dist/
+.venv/
+
+# Data (never commit: the fish-oil data is private and this repository is public)
+/data/
+*.cdf
+*.mzML
+*.mzXML
+*.npz
+*.h5
+# Golden fixtures are synthetic, small, and are the reference for bit-identity tests.
+!/tests/golden/*.npz
+
+# Outputs: no caches or binaries in git.
+/results/
+*.npy
+*.pkl
+logs/
+*.log
+
+# OS
+.DS_Store
+
+# Test and tool artefacts
+.coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+junit.xml

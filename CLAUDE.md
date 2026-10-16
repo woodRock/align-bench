@@ -1,0 +1,80 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+`alignbench`: the shared, torch-free core of the GC-MS retention-time alignment work, and a benchmark
+runner on top of it. It holds the data model and loaders, anchor matching, warp primitives, the
+classical baselines, every scoring protocol and provenance. warp-align (`warpalign`), joint-align
+(`jointalign`) and trust-align (`trustalign`) stay separate repositories, keep only what is new in
+each paper, and register their methods as plugins (entry point group `alignbench.methods`).
+
+Every method is reduced to what it estimates: a **correspondence map** from retention time (bins)
+in batch k to retention time in batch l. Every protocol scores that map the same way.
+
+## Commands
+
+alignbench has its **own venv**. The global `python3.11` holds editable checkouts of warpalign,
+joint-align and trustalign that Jesse's runs import; installing alignbench's `[golden]` extra there
+would replace them with pinned commits. Never `pip install` into the global interpreter from here.
+
+```bash
+make venv                                         # python3.11 -m venv .venv + editable install [dev]
+make check                                        # lint + types + tests with coverage (≥ 90 %)
+.venv/bin/python -m pytest -m "not slow"          # fast suite
+.venv/bin/python -m pytest -m slow                # end-to-end runs on synthetic data
+.venv/bin/python -m pytest tests/test_x.py::test_name
+.venv/bin/python -m pip install -e ".[golden]"    # only to regenerate tests/golden/*.npz
+```
+
+Outside the venv, always call `python3.11` explicitly (`python3` is a zsh alias that is not
+expanded under `nohup`). Markers: `slow` (end-to-end) and `real` (needs the private data under
+`data/fish_oil`; skipped otherwise).
+
+## Architecture (target; see the handover plan, milestones M0–M5)
+
+- `axis.py`: `TimeAxis(n_bins, run_min, eval_start_min)`, `FISH_OIL_AXIS = (200, 45.0, 5.0)`. The
+  time axis is a value, never a module global. Functions that used `N_BINS`/`BIN_MIN`/`EVAL_BINS`
+  take `axis: TimeAxis = FISH_OIL_AXIS`.
+- `data.py`: `Batch` (warpalign's, plus `axis`), `Study` (batches, axis, name, optional `Truth`).
+- `datasets/`: `fish_oil` (private format), `synthetic` (jointalign worlds and trustalign worlds),
+  and a registry of named datasets. Every loader takes explicit paths.
+- `anchors.py`: columnar `Anchors(ba, bb, sa, sb, ta, tb)`; two named matchers, both bit-identical
+  to their origin: `match_pooled` (= `warpalign.anchors.extract_anchors`, integer bins) and `harvest`
+  (= `jointalign.multibatch.harvest_anchors`, sub-bin, every cross-batch sample pair). Settings in a
+  frozen `MatchConfig` whose defaults are today's constants.
+- `warps.py`, `maps.py` (`CorrespondenceMap` protocol + adapters), `methods/` (`Aligner`, `Fit`,
+  registry, built-in baselines), `metrics/` (tic, protocols, truth, anchors, stats),
+  `provenance.py`, `bench.py`, `cli.py`.
+
+## Decisions (from Jesse, 2026-10-17)
+
+- Name stays `alignbench` (repo `woodRock/alignbench`).
+- Headline protocol for real data is **B-frame** (`tic_bframe`); midpoint is reported alongside.
+- MTBLS21/MTBLS288 loaders come in their own milestone **after M4**. The dataset registry and
+  loader interface are built in M1 so third parties can add datasets without touching the core.
+- Citable synthetic benchmark: undecided. Until then, give every synthetic dataset a version ID
+  (e.g. `synthetic:k5@1`) and decide on freezing before M4.
+- Still to ask before M5: when trust-align may migrate; whether Red Herring should consume
+  `alignbench.data`/`alignbench.anchors`.
+
+## Rules for this repo
+
+- **Numbers must not change.** Every function moved from an upstream package gets a golden test:
+  alignbench's output vs. the pinned upstream function's, on synthetic data, with `np.array_equal`
+  (or `np.allclose(..., rtol=0, atol=0)`-level strictness; where float order genuinely differs, say
+  why in a comment). Fixtures are generated once by a script importing the `[golden]` pins and
+  committed under `tests/golden/*.npz`. New options default to existing behaviour, with a
+  bit-identical test.
+- Core dependencies are numpy, scipy and scikit-learn only. No torch, no matplotlib (plots go in the
+  `[plots]` extra, imported lazily). alignbench never imports a plugin package.
+- No repo-relative paths (`Path(__file__).parents[…]`) and no environment variables: paths are
+  explicit arguments. The CI `package` job imports from outside the checkout to catch this.
+- **`data/` is private and must never be committed or pushed** (the GitHub repo is public). Code is MIT.
+- **Do not commit, tag or push results**; Jesse does. Code commits go on branches.
+- **Never edit an upstream package (warp-align, joint-align, trust-align) while one of Jesse's runs
+  uses its editable install.** Check with Jesse or the repo's `logs/`. Don't touch those
+  repositories at all before M5; trust-align not before Jesse says so.
+- Paper runs use CPU (bit-reproducible under a seed).
+- Results files are self-describing: provenance header, protocol, axis, method parameters, and the
+  source of each number. Papers are written separately (Claude web client) from these files.
+- The README must not name a target venue; it keeps only the software citation (`CITATION.cff`).

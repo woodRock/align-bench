@@ -1,0 +1,93 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "alignbench"
+version = "0.1.0.dev0"
+description = "Shared core and benchmark for GC-MS retention-time alignment: data, anchors, warps, baselines, scoring protocols"
+requires-python = ">=3.11"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Jesse Wood" }]
+# The core is torch-free and matplotlib-free. Methods that need more register as plugins from
+# their own packages (entry point group `alignbench.methods`).
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "scikit-learn>=1.3",
+]
+
+[project.optional-dependencies]
+plots = ["matplotlib>=3.7"]
+dev = ["pytest>=8", "coverage>=7", "ruff", "mypy"]
+# Only for scripts/00_make_golden.py, which regenerates tests/golden/*.npz from the upstream
+# functions alignbench replaces. Pinned to the commits trust-align uses (warpalign is the commit
+# joint-align itself pins). The fixtures are committed, so tests never need this extra. Pulls in
+# torch through warpalign. Install it into the alignbench venv only, never into an environment
+# holding editable checkouts of these packages: pip would replace them.
+golden = [
+    "warpalign @ git+https://github.com/woodRock/warp-align.git@ea404e753a0ac02c45918fbfe1fc58b8f0b25cd9",
+    "joint-align @ git+https://github.com/woodRock/joint-align.git@842ca59535f5d18a3d9031aeb35c73ca34fc20f3",
+    "trustalign @ git+https://github.com/woodRock/trust-align.git@c7b3e42ae4f2031f6a33e649a378f35defb142b3",
+]
+
+[project.urls]
+Repository = "https://github.com/woodRock/alignbench"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+alignbench = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+    "slow: end-to-end runs on synthetic data (deselect with -m \"not slow\")",
+    "real: needs the private fish-oil data under data/fish_oil (skipped otherwise)",
+]
+
+[tool.coverage.run]
+source = ["alignbench"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 90
+exclude_also = [
+    "if __name__ == .__main__.:",
+]
+
+[tool.ruff]
+line-length = 115
+target-version = "py311"
+
+[tool.ruff.lint]
+# Same families and exceptions as warpalign, joint-align and trust-align.
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "C4", "RUF"]
+ignore = [
+    "E702",     # short `a = …; b = …` statements
+    "E731",     # small named lambdas (say, fit, short)
+    "E741",     # 'l' as a name (batch indices k, l)
+    "B905",     # zip() without strict=
+    "C408",     # dict(...) calls
+    "RUF001",   # ×, −, σ, τ etc. in strings and comments are intended
+    "RUF002",
+    "RUF003",
+    "RUF005",   # list concatenation
+    "SIM300",   # comparisons against UPPER_CASE arrays are not Yoda conditions
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["alignbench", "conftest"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src/alignbench"]
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
