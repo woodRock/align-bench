@@ -1,0 +1,6 @@
+# Numeric library versions the golden fixtures were generated with (see each fixture's '#env').
+# CI's test job installs under these, so a fixture mismatch can only come from the platform.
+# Bump together with a fixture regeneration (scripts/00_make_golden.py).
+numpy==2.4.6
+scipy==1.17.1
+scikit-learn==1.9.1
