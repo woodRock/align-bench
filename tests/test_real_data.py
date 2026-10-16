@@ -56,3 +56,16 @@ def test_tic_baselines_match_warpalign(both):
         for mine, up in ((cow_tic_align, baselines.cow_tic_align), (icoshift_align, baselines.icoshift_align)):
             x, y = mine(a.tic[i], b.tic[0]), up(a.tic[i], b.tic[0])
             assert np.array_equal(x.src, y.src) and np.array_equal(x.warped, y.warped) and x.details == y.details
+
+
+def test_harvest_matches_jointalign_on_real_samples(both):
+    pytest.importorskip('jointalign')
+    from jointalign.multibatch import harvest_anchors
+
+    _, ours, _ = both
+    chromas = [b.chromas[:2] for b in ours.batches]
+    tics = [b.tic_raw[:2] for b in ours.batches]
+    got, want = anchors.harvest_arrays(chromas, tics), harvest_anchors(chromas, tics)
+    assert len(got) > 50
+    for f in ('ba', 'bb', 'sa', 'sb', 'ta', 'tb'):
+        assert np.array_equal(getattr(got, f), getattr(want, f))

@@ -1,3 +1,3 @@
 """Scoring: TIC correlation (tic), summary statistics (stats), diagnostics (silhouette, warp
-magnitude). Protocols that score a correspondence map, truth-based and held-out-anchor metrics
-follow in later modules."""
+magnitude), error against a synthetic truth (truth), held-out anchor error (anchors). The
+protocols that score a correspondence map on a study follow in M3 (protocols)."""

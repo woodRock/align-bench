@@ -1,5 +1,12 @@
 """Calibration anchors: the same compound located in batch A and batch B by spectral matching.
 
+Two matchers, both used in published results and both reproduced bit for bit:
+
+  match_pooled  warpalign.anchors.extract_anchors: integer-bin (r, q) anchors between two batches,
+                pooled over a few batch-A samples matched against B[0], then filtered.
+  harvest       jointalign.multibatch.harvest_anchors: sub-bin anchors on every cross-batch sample
+                pair of a study, kept per sample pair (columnar Anchors).
+
 Pooled matcher (match_pooled; warpalign.anchors.extract_anchors, reproduced bit for bit):
   For one sample pair (match_sample_pair): peaks on the raw TIC → spectral cosine between context
   fingerprints → Hungarian assignment within max_drift_min → similarity threshold → refine each
@@ -9,16 +16,24 @@ Pooled matcher (match_pooled; warpalign.anchors.extract_anchors, reproduced bit 
   ≤ merge_gap bins apart → drift outlier filter (leave-one-out residual from the straight-line
   drift trend of the other anchors) → local-slope plausibility filter (slope_range).
 
-Anchors here are (r, q) integer bins: r in batch A, q in batch B. Peaks are found on the raw TIC
-(compound abundance); fingerprints and matching use the normalised chromatogram.
+Pooled anchors are (r, q) integer bins: r in batch A, q in batch B (Anchors.from_pairs converts).
+
+Harvest (match_subbin per sample pair; jointalign.multibatch.match_anchors): the same peak,
+fingerprint, Hungarian and threshold steps, then parabolic sub-bin refinement on both sides
+(the raw TIC around the A peak; the fingerprint similarity around the best B scan), RANSAC
+(random_state 0, not the pooled matcher's 42) and a greedy monotone filter.
+
+Peaks are found on the raw TIC (compound abundance); fingerprints and matching use the
+normalised chromatogram.
 """
 
 from __future__ import annotations
 
 from bisect import bisect_left
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
+from itertools import combinations
 
 import numpy as np
 from scipy.optimize import linear_sum_assignment
@@ -26,7 +41,7 @@ from scipy.signal import find_peaks
 from sklearn.linear_model import RANSACRegressor
 
 from .axis import FISH_OIL_AXIS, TimeAxis
-from .data import Batch
+from .data import Batch, Study
 
 Anchor = tuple[int, int]
 
@@ -54,12 +69,81 @@ class MatchConfig:
 DEFAULT_MATCH = MatchConfig()
 
 
+POOLED = -1  # sample index of anchors pooled over samples (match_pooled)
+_COLS = ('ba', 'bb', 'sa', 'sb', 'ta', 'tb')
+
+
+@dataclass
+class Anchors:
+    """Anchor pairs, one row per anchor (jointalign.multibatch.Anchors, plus keyword-only axis and stages).
+
+    Rows are oriented ba < bb. sa, sb are sample indices (POOLED for pooled anchors); ta, tb are RT
+    bins (fractional for harvest, integer-valued for match_pooled)."""
+
+    ba: np.ndarray  # batch index of the first chromatogram
+    bb: np.ndarray  # batch index of the second chromatogram (ba < bb)
+    sa: np.ndarray  # sample index within batch ba
+    sb: np.ndarray  # sample index within batch bb
+    ta: np.ndarray  # RT bin in batch ba
+    tb: np.ndarray  # RT bin in batch bb
+    axis: TimeAxis = field(default=FISH_OIL_AXIS, kw_only=True)
+    stages: dict[str, int] | None = field(default=None, kw_only=True)  # matcher stage counts, if known
+
+    def __len__(self) -> int:
+        return len(self.ta)
+
+    def subset(self, mask: np.ndarray) -> Anchors:
+        """The rows in mask (boolean or indices); stage counts no longer apply and are dropped."""
+        return Anchors(*(getattr(self, f)[mask] for f in _COLS), axis=self.axis)
+
+    def pair(self, a: int, b: int) -> Anchors:
+        """Anchors between batches a and b, oriented so that ta is in a and tb is in b."""
+        if a < b:
+            return self.subset((self.ba == a) & (self.bb == b))
+        s = self.subset((self.ba == b) & (self.bb == a))
+        return Anchors(s.bb, s.ba, s.sb, s.sa, s.tb, s.ta, axis=self.axis)
+
+    @classmethod
+    def from_pairs(
+        cls,
+        pairs: Sequence[tuple[float, float]],
+        a: int = 0,
+        b: int = 1,
+        axis: TimeAxis = FISH_OIL_AXIS,
+        stages: dict[str, int] | None = None,
+    ) -> Anchors:
+        """warpalign's (r, q) list (r in batch a, q in batch b) as pooled Anchors rows."""
+        if a == b:
+            raise ValueError('anchors need two different batches')
+        arr = np.asarray(pairs, dtype=float).reshape(-1, 2)
+        n = len(arr)
+        ta, tb = (arr[:, 0], arr[:, 1]) if a < b else (arr[:, 1], arr[:, 0])
+        full = lambda v: np.full(n, v, dtype=int)
+        return cls(full(min(a, b)), full(max(a, b)), full(POOLED), full(POOLED), ta, tb, axis=axis, stages=stages)
+
+    def as_pairs(self, a: int | None = None, b: int | None = None) -> list[Anchor]:
+        """warpalign's (r, q) integer-bin list, for one batch pair (oriented a → b; default: the only
+        pair present). Fractional anchors raise: round them explicitly if that is intended."""
+        if a is None or b is None:
+            pairs = set(zip(self.ba.tolist(), self.bb.tolist()))
+            if len(pairs) > 1:
+                raise ValueError(f'anchors span {len(pairs)} batch pairs; pass a and b')
+            a, b = next(iter(pairs)) if pairs else (0, 1)
+        p = self.pair(a, b)
+        if not (np.all(p.ta == np.round(p.ta)) and np.all(p.tb == np.round(p.tb))):
+            raise ValueError('as_pairs needs integer-bin anchors (these are sub-bin)')
+        return [(int(r), int(q)) for r, q in zip(p.ta, p.tb)]
+
+
 @dataclass
 class AnchorResult:
     anchors: list[Anchor]
     stages: dict[str, int] = field(default_factory=dict)  # stage → count (match stages summed)
     removed_by_outlier: list[Anchor] = field(default_factory=list)
     removed_by_slope: list[Anchor] = field(default_factory=list)
+
+    def to_anchors(self, a: int = 0, b: int = 1, axis: TimeAxis = FISH_OIL_AXIS) -> Anchors:
+        return Anchors.from_pairs(self.anchors, a, b, axis, dict(self.stages))
 
 
 # ── Peaks and fingerprints ────────────────────────────────────────────────────
@@ -366,6 +450,110 @@ def match_pooled(a: Batch, b: Batch, cfg: MatchConfig = DEFAULT_MATCH) -> Anchor
     if a.axis != b.axis:
         raise ValueError(f'batches {a.name!r} and {b.name!r} are on different time axes')
     return match_pooled_arrays(a.chromas, b.chromas, a.tic_raw, b.tic_raw, cfg, a.axis)
+
+
+# ── Sub-bin anchors on every cross-batch sample pair ─────────────────────────
+
+
+def _parabolic(ym: float, y0: float, yp: float) -> float:
+    """Sub-bin offset of the vertex of the parabola through three equally spaced points."""
+    den = ym - 2.0 * y0 + yp
+    if den >= 0:
+        return 0.0
+    return float(np.clip(0.5 * (ym - yp) / den, -0.5, 0.5))
+
+
+def _fingerprints_raw(chroma: np.ndarray, pks: np.ndarray) -> np.ndarray:
+    # jointalign's variant: no reshape, so an empty peak list gives shape (0,) (never reached:
+    # match_subbin returns before fingerprinting fewer than two peaks).
+    return np.array([fingerprint(chroma, int(p)) for p in pks])
+
+
+def match_subbin(
+    a: np.ndarray,
+    b: np.ndarray,
+    tic_a: np.ndarray | None = None,
+    tic_b: np.ndarray | None = None,
+    cfg: MatchConfig = DEFAULT_MATCH,
+    axis: TimeAxis = FISH_OIL_AXIS,
+) -> np.ndarray:
+    """Spectral anchors between chromatograms a and b [T, M], as an (n, 2) array of sub-bin RT
+    positions (t_a, t_b) (jointalign.multibatch.match_anchors). Peaks on the raw TICs tic_a, tic_b
+    (the chromatogram sums if not given)."""
+    empty = np.empty((0, 2))
+    tic_a = a.sum(axis=1) if tic_a is None else np.asarray(tic_a, dtype=float)
+    tic_b = b.sum(axis=1) if tic_b is None else np.asarray(tic_b, dtype=float)
+    pa, pb = (detect_peaks(t, cfg.peak_height_pct, cfg.peak_min_dist, cfg.peak_max_n) for t in (tic_a, tic_b))
+    if len(pa) < 2 or len(pb) < 2:
+        return empty
+    fa, fb = _fingerprints_raw(a, pa), _fingerprints_raw(b, pb)
+    sim = fa @ fb.T
+    far = np.abs(pa[:, None] - pb[None, :]) > cfg.max_drift_min / axis.bin_min
+    ri, ci = linear_sum_assignment(-np.where(far, -1.0, sim))
+    avail = sim[~far]
+    thr = max(float(np.percentile(avail, 70)), cfg.sim_threshold) if avail.size >= 3 else cfg.sim_threshold
+    keep = (sim[ri, ci] >= thr) & ~far[ri, ci]
+    ri, ci = ri[keep], ci[keep]
+    if len(ri) < 2:
+        return empty
+
+    n_bins, rad = axis.n_bins, cfg.refine_radius
+    out = []
+    for i, j in zip(ri, ci):
+        p = int(pa[i])
+        ta = p + (_parabolic(tic_a[p - 1], tic_a[p], tic_a[p + 1]) if 0 < p < n_bins - 1 else 0.0)
+        cands = np.arange(max(0, pb[j] - rad), min(n_bins, pb[j] + rad + 1))
+        s = np.array([float(fa[i] @ fingerprint(b, int(c))) for c in cands])
+        k = int(np.argmax(s))
+        tb = cands[k] + (_parabolic(s[k - 1], s[k], s[k + 1]) if 0 < k < len(s) - 1 else 0.0)
+        out.append((ta, tb))
+    anc = np.array(out, dtype=float)
+
+    if len(anc) >= 4:
+        try:
+            rs = RANSACRegressor(residual_threshold=cfg.ransac_resid, min_samples=2, random_state=0)
+            rs.fit(anc[:, :1], anc[:, 1])
+            if rs.inlier_mask_.sum() >= 2:
+                anc = anc[rs.inlier_mask_]
+        except ValueError:
+            pass
+
+    anc = anc[np.argsort(anc[:, 0])]
+    mono = [0]
+    for i in range(1, len(anc)):
+        if anc[i, 0] > anc[mono[-1], 0] and anc[i, 1] > anc[mono[-1], 1]:
+            mono.append(i)
+    return anc[mono] if len(mono) >= 2 else empty
+
+
+def harvest_arrays(
+    chromas: Sequence[np.ndarray],
+    tics: Sequence[np.ndarray] | None = None,
+    cfg: MatchConfig = DEFAULT_MATCH,
+    axis: TimeAxis = FISH_OIL_AXIS,
+) -> Anchors:
+    """match_subbin on every cross-batch sample pair (jointalign.multibatch.harvest_anchors).
+    chromas[k][i] is sample i of batch k; tics[k][i] its raw TIC for peak detection (default: the
+    chromatogram sum; every published run passed the raw TICs)."""
+    cols: list[list[np.ndarray]] = [[] for _ in range(6)]
+    tic = (lambda k, i: None) if tics is None else (lambda k, i: tics[k][i])
+    for a, b in combinations(range(len(chromas)), 2):
+        for i, ca in enumerate(chromas[a]):
+            for j, cb in enumerate(chromas[b]):
+                anc = match_subbin(ca, cb, tic(a, i), tic(b, j), cfg, axis)
+                n = len(anc)
+                for col, v in zip(cols, (a, b, i, j)):
+                    col.append(np.full(n, v, dtype=int))
+                cols[4].append(anc[:, 0])
+                cols[5].append(anc[:, 1])
+    return Anchors(*(np.concatenate(c) for c in cols), axis=axis)
+
+
+def harvest(study: Study, cfg: MatchConfig = DEFAULT_MATCH) -> Anchors:
+    """Sub-bin anchors on every cross-batch sample pair of a study, peaks on the raw TICs."""
+    return harvest_arrays(
+        [b.chromas for b in study.batches], [b.tic_raw for b in study.batches], cfg, study.axis
+    )
 
 
 def format_stages(stages: dict[str, int]) -> str:

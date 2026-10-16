@@ -30,8 +30,7 @@ Outside the venv, always call `python3.11` explicitly (`python3` is a zsh alias 
 expanded under `nohup`). Markers: `slow` (end-to-end) and `real` (needs the private data under
 `data/fish_oil`; skipped otherwise).
 
-## Architecture (M1 done: axis, data, datasets/fish_oil + registry, anchors.match_pooled, warps,
-methods/tic, metrics/{tic,stats,diagnostics}; the rest is the target of M2–M4)
+## Architecture (M1 + M2 done; methods registry, protocols, runner and CLI are M3–M4)
 
 - `axis.py`: `TimeAxis(n_bins, run_min, eval_start_min)`, `FISH_OIL_AXIS = (200, 45.0, 5.0)`. The
   time axis is a value, never a module global. Functions that used `N_BINS`/`BIN_MIN`/`EVAL_BINS`
@@ -46,13 +45,23 @@ methods/tic, metrics/{tic,stats,diagnostics}; the rest is the target of M2–M4)
 - `methods/tic.py`: COW-TIC, icoshift. Anchor warps (constant shift, linear, PCHIP) are in
   `warps.py`. warpalign's `evaluation.anchor_warp`/`unaligned` (PairEval) become the B-frame
   protocol in M3; until then `tests/golden.py` composes them from the moved pieces.
-- `warps.py`, `maps.py` (`CorrespondenceMap` protocol + adapters), `methods/` (`Aligner`, `Fit`,
-  registry, built-in baselines), `metrics/` (tic, protocols, truth, anchors, stats),
-  `provenance.py`, `bench.py`, `cli.py`.
+- `graphs.py`: anchor-graph topologies, thin / corrupt / jitter (trustalign.graphs).
+- `maps.py`: `CorrespondenceMap` protocol (k, l, t; optional sample i, j) + adapters
+  (`from_latent` for JointWarp-like models, `from_pair_fns`, `compose_paths` along
+  `shortest_paths`), `pchip_pairwise` / `composed_pchip`.
+- `datasets/synthetic.py`: jointalign `make_world` ('synthetic:fishlike') and trustalign worlds
+  ('synthetic:k<K>'), as Studies with `SyntheticTruth` (true_map, observed_span); generator
+  `VERSION` in the dataset id (`synthetic:k5@1`).
+- `metrics/truth.py` (map error, summarise, cycle inconsistency, rejection),
+  `metrics/anchors.py` (RT-block folds, held-out error, λ selection).
+- `provenance.py`: one implementation from `direct_url.json` (pinned git+ / editable checkout /
+  installed); `header()` = alignbench + plugin distributions + extras + environment.
+- To come: `methods/` (`Aligner`, `Fit`, registry, built-ins), `metrics/protocols.py`
+  (B-frame, midpoint), `bench.py`, `cli.py`.
 
 ## Golden tests
 
-`tests/golden.py` holds one case builder (`build_warpalign(api)`) and two APIs mapping the same
+`tests/golden.py` holds one case builder per upstream (`build_warpalign`, `build_jointalign`, `build_trustalign`) and two APIs mapping the same
 names to the pinned upstream functions or to alignbench's. `scripts/00_make_golden.py` runs it
 against upstream and writes `tests/golden/<pkg>_<commit8>.<system>-<machine>.npz` (one per platform: macOS and Linux BLAS differ in the last bits; CI uploads the Linux one as an artifact) (flattened outputs, `#source`
 commit, `#env` platform + numpy/scipy/sklearn versions). `tests/test_golden.py` runs it against
@@ -71,8 +80,8 @@ are in the fixture, so a numpy RNG change fails loudly.
   loader interface are built in M1 so third parties can add datasets without touching the core.
 - Citable synthetic benchmark: undecided. Until then, give every synthetic dataset a version ID
   (e.g. `synthetic:k5@1`) and decide on freezing before M4.
-- Still to ask before M5: when trust-align may migrate; whether Red Herring should consume
-  `alignbench.data`/`alignbench.anchors`.
+- trust-align may migrate in M5 with the others: Experiment 1 is finished (Jesse, 2026-10-17).
+- Still to ask before M5: whether Red Herring should consume `alignbench.data`/`alignbench.anchors`.
 
 ## Rules for this repo
 
@@ -90,7 +99,7 @@ are in the fixture, so a numpy RNG change fails loudly.
 - **Do not commit, tag or push results**; Jesse does. Code commits for alignbench go straight to `main` (Jesse, 2026-10-17); the M5 changes to the other repositories still go through branches and PRs.
 - **Never edit an upstream package (warp-align, joint-align, trust-align) while one of Jesse's runs
   uses its editable install.** Check with Jesse or the repo's `logs/`. Don't touch those
-  repositories at all before M5; trust-align not before Jesse says so.
+  repositories at all before M5.
 - Paper runs use CPU (bit-reproducible under a seed).
 - Results files are self-describing: provenance header, protocol, axis, method parameters, and the
   source of each number. Papers are written separately (Claude web client) from these files.

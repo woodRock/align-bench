@@ -63,6 +63,10 @@ class Truth(Protocol):
         """Minutes in batch k → the minutes in batch l of the same compound."""
         ...
 
+    def observed_span(self, k: int) -> tuple[float, float]:
+        """Earliest and latest elution time (min) of the compounds batch k actually records."""
+        ...
+
 
 @dataclass(frozen=True, eq=False, init=False)
 class Study:

@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import hashlib
 import platform
-from importlib.metadata import version
 from types import SimpleNamespace
 
 import numpy as np
@@ -27,24 +26,11 @@ def platform_tag() -> str:
     return f'{platform.system()}-{platform.machine()}'.lower()
 
 
-def _blas() -> str:
-    """BLAS library, and for OpenBLAS the kernel it picked for this CPU and its thread count:
-    OpenBLAS chooses SIMD kernels per CPU model, so last bits differ between CI runners."""
-    name = np.__config__.CONFIG['Build Dependencies']['blas']['name']
-    try:
-        from threadpoolctl import threadpool_info
-
-        info = [i for i in threadpool_info() if i.get('user_api') == 'blas']
-    except ImportError:  # pragma: no cover - threadpoolctl comes with scikit-learn
-        info = []
-    kern = ','.join(f'{i.get("architecture")}x{i.get("num_threads")}' for i in info)
-    return f'{name}[{kern}]' if kern else name
-
-
 def environment() -> str:
-    """Platform, BLAS and numeric library versions: bit-identity is only expected within one."""
-    libs = ' '.join(f'{d}={version(d)}' for d in ('numpy', 'scipy', 'scikit-learn'))
-    return f'{platform.system()}-{platform.machine()} blas={_blas()} python={platform.python_version()} {libs}'
+    """Platform, BLAS and numeric library versions (alignbench.provenance.environment)."""
+    from alignbench.provenance import environment as env
+
+    return env()
 
 
 # ── Flattening and comparison ────────────────────────────────────────────────
@@ -415,4 +401,223 @@ def build_warpalign(api) -> dict:
             **{k: api.eval_anchor_warp(a, b, fn) for k, fn in fns.items()},
         }
         out[f'pair_{name}'] = case
+    return out
+
+
+# ── jointalign (842ca595) and trustalign (c7b3e42a) ──────────────────────────
+
+ANCHOR_COLS = ('ba', 'bb', 'sa', 'sb', 'ta', 'tb')
+
+
+def _anc(a) -> dict:
+    return {f: getattr(a, f) for f in ANCHOR_COLS}
+
+
+def upstream_api_m2() -> SimpleNamespace:
+    """The pinned jointalign and trustalign functions (needs the [golden] extra)."""
+    from dataclasses import asdict
+
+    from jointalign import multibatch as mb
+    from jointalign import synthetic as syn
+    from trustalign import baselines, graphs, metrics, worlds
+
+    return SimpleNamespace(
+        source='jointalign+trustalign',
+        Anchors=mb.Anchors,
+        DEFAULT_BATCHES=syn.DEFAULT_BATCHES,
+        BatchSpec=syn.BatchSpec,
+        make_world=syn.make_world,
+        true_map=syn.true_map,
+        match_subbin=mb.match_anchors,
+        harvest=mb.harvest_anchors,
+        pchip_pairwise=mb.pchip_pairwise,
+        world=worlds.make,
+        world_parts=lambda w: dict(
+            specs=[asdict(s) for s in w.specs],
+            chromas=w.chromas,
+            tic_raws=w.tic_raws,
+            truth=w.truth,
+            sizes=w.sizes,
+        ),
+        observed_span=lambda w, k: w.observed_span(k),
+        world_true_map=lambda w, k, l, t: w.true_map(k, l, t),
+        draw_specs=lambda K, rng: [asdict(s) for s in worlds.draw_specs(K, rng)],
+        g=graphs,
+        shortest_paths=baselines.shortest_paths,
+        counts=baselines._counts,
+        composed_pchip=lambda anc, K, edges: baselines.composed_pchip(anc, K, edges).map,
+        rt_folds=metrics.rt_folds,
+        anchor_errors=metrics.anchor_errors,
+        select_lambda=metrics.select_lambda,
+        inside_mask=metrics.inside_mask,
+        map_errors=metrics.map_errors,
+        summarise=metrics.summarise,
+        cycle_inconsistency=metrics.cycle_inconsistency,
+        rejection=metrics.rejection,
+    )
+
+
+def alignbench_api_m2() -> SimpleNamespace:
+    from dataclasses import asdict
+
+    from alignbench import anchors, graphs, maps
+    from alignbench.datasets import synthetic as syn
+    from alignbench.metrics import anchors as manchors
+    from alignbench.metrics import truth as mtruth
+
+    return SimpleNamespace(
+        source='alignbench',
+        Anchors=anchors.Anchors,
+        DEFAULT_BATCHES=syn.DEFAULT_BATCHES,
+        BatchSpec=syn.BatchSpec,
+        make_world=syn.make_world,
+        true_map=syn.true_map,
+        match_subbin=anchors.match_subbin,
+        harvest=anchors.harvest_arrays,
+        pchip_pairwise=maps.pchip_pairwise,
+        world=syn.make_world_k,
+        world_parts=lambda s: dict(
+            specs=[asdict(x) for x in s.truth.specs],
+            chromas=[b.chromas for b in s.batches],
+            tic_raws=[b.tic_raw for b in s.batches],
+            truth=s.truth.truth,
+            sizes=[len(b) for b in s.batches],
+        ),
+        observed_span=lambda s, k: s.truth.observed_span(k),
+        world_true_map=lambda s, k, l, t: s.truth.true_map(k, l, t),
+        draw_specs=lambda K, rng: [asdict(x) for x in syn.draw_specs(K, rng)],
+        g=graphs,
+        shortest_paths=maps.shortest_paths,
+        counts=maps.edge_counts,
+        composed_pchip=lambda anc, K, edges: maps.composed_pchip(anc, K, edges)[0],
+        rt_folds=manchors.rt_folds,
+        anchor_errors=manchors.anchor_errors,
+        select_lambda=manchors.select_lambda,
+        inside_mask=mtruth.inside_mask,
+        map_errors=mtruth.map_errors,
+        summarise=mtruth.summarise,
+        cycle_inconsistency=mtruth.cycle_inconsistency,
+        rejection=mtruth.rejection,
+    )
+
+
+def build_jointalign(api) -> dict:
+    """jointalign: synthetic worlds and truth, sub-bin matching, harvest, Anchors, pairwise PCHIP."""
+    out: dict = {}
+    grid = np.linspace(-2.0, 47.0, 211)
+    worlds = {
+        'default': api.make_world(),
+        'custom': api.make_world(
+            batches=(
+                api.BatchSpec('x', 3, 1.0, -0.5, 0.3, 0.2, 4.0),
+                api.BatchSpec('y', 2, -1.5, 1.0, 0.0, 0.0, 3.0),
+                api.BatchSpec('z', 3, 0.3, 2.0, 0.1, 5.0, 5.0),
+            ),
+            n_compounds=40,
+            mz_bins=400,
+            sigma_bins=1.1,
+            jitter_min=0.08,
+            seed=5,
+        ),
+    }
+    for wname, (chromas, tics, truth) in worlds.items():
+        names = list(truth['batches'])
+        case: dict = {
+            'chromas': [digest(c) for c in chromas],
+            'tic_raws': [digest(t) for t in tics],
+            'truth': truth,
+            'true_map': {f'{a}>{b}': api.true_map(truth, a, b, grid) for a in names for b in names if a != b},
+        }
+        anc = api.harvest(chromas, tics)
+        case['harvest'] = _anc(anc)
+        case['pair'] = [_anc(anc.pair(0, 1)), _anc(anc.pair(2, 0))]
+        case['subset'] = _anc(anc.subset(anc.ta > 100))
+        bins = np.linspace(-5.0, 205.0, 97)
+        case['pchip'] = {
+            f'{a}>{b}': api.pchip_pairwise(anc, a, b)(bins)
+            for a in range(len(names))
+            for b in range(len(names))
+            if a != b
+        }
+        out[f'world_{wname}'] = case
+    small = worlds['custom'][0]
+    out['harvest_no_tics'] = _anc(api.harvest([c[:2] for c in small]))
+    one = api.Anchors(*(np.array([v]) for v in (0, 1, 0, 0, 50.0, 47.0)))
+    out['pchip_one_anchor'] = api.pchip_pairwise(one, 0, 1)(np.array([0.0, 50.0, 199.0]))
+    for name, make in synth.PAIRS.items():
+        (ca, ra), (cb, rb) = make()
+        out[f'subbin_{name}'] = [
+            api.match_subbin(ca[i], cb[j], ra[i], rb[j]) for i in range(len(ca)) for j in range(2)
+        ]
+        out[f'subbin_sum_{name}'] = [api.match_subbin(ca[i], cb[0]) for i in range(len(ca))]
+    return out
+
+
+def build_trustalign(api) -> dict:
+    """trustalign: K-batch worlds, graph topologies and perturbations, shortest paths, composed
+    PCHIP, held-out folds and λ selection, truth metrics."""
+    out: dict = {'draw_specs': api.draw_specs(6, np.random.default_rng(3))}
+    g = api.g
+    for K, seed in ((4, 0), (5, 3)):
+        w = api.world(K, seed)
+        parts = api.world_parts(w)
+        case: dict = {
+            'specs': parts['specs'],
+            'chromas': [digest(c) for c in parts['chromas']],
+            'tic_raws': [digest(t) for t in parts['tic_raws']],
+            'truth': parts['truth'],
+            'span': [list(api.observed_span(w, k)) for k in range(K)],
+        }
+        times = np.arange(200) * 0.225
+        case['true_map'] = {
+            f'{k}>{l}': api.world_true_map(w, k, l, times) for k in range(K) for l in range(K) if k != l
+        }
+        anc = api.harvest(parts['chromas'], parts['tic_raws'])
+        case['harvest'] = _anc(anc)
+        sizes = parts['sizes']
+        case['hubs'] = [g.weak_hub(sizes), g.hub_of('weak_star', sizes), g.hub_of('star', sizes)]
+        topo = {}
+        for t in g.TOPOLOGIES:
+            if t.startswith('chain+') and int(t[6:]) > K * (K - 1) // 2 - (K - 1):
+                continue
+            topo[t] = sorted(g.edges_for(t, K, sizes, np.random.default_rng(7)))
+        case['topologies'] = topo
+        rng = np.random.default_rng(11)
+        edges = set(map(tuple, topo['ring']))
+        kept = g.thin(anc, edges, 5, rng)
+        case['thin'] = [kept, g.thin(anc, edges, None, rng), g.thin(anc, set(), 3, rng)]
+        bad_anc, bad = g.corrupt(anc.subset(kept), 0.25, rng)
+        case['corrupt'] = [_anc(bad_anc), bad]
+        case['jitter'] = [_anc(g.jitter(anc, 0.5, rng)), _anc(g.jitter(anc, 0.0, rng))]
+        case['chords'] = sorted(g.chain_with_chords(K, 1, rng))
+        order = g.removal_order(K, rng)
+        case['removal'] = [order, sorted(g.thinned_complete(K, 0.5, order))]
+        case['reachable'] = sorted(g.reachable(1, K, {(0, 1), (2, 3)}))
+        case['adjacency'] = g.adjacency(K, edges)
+        for t in ('complete', 'chain', 'star', 'ring'):
+            e = set(map(tuple, topo[t]))
+            case[f'paths_{t}'] = {
+                f'{k}>{l}': p for (k, l), p in api.shortest_paths(K, e, api.counts(anc, e)).items()
+            }
+        gmap = api.composed_pchip(anc, K, set(map(tuple, topo['chain'])))
+        bins = np.linspace(-3.0, 202.0, 83)
+        case['composed'] = {f'{k}>{l}': gmap(k, l, bins) for k in range(K) for l in range(K)}
+        case['folds'] = api.rt_folds(anc)
+        case['anchor_errors'] = api.anchor_errors(gmap, anc)
+        complete = set(map(tuple, topo['complete']))
+        fit = lambda a, lam, K=K, e=complete: SimpleNamespace(map=api.composed_pchip(a, K, e))
+        case['select_lambda'] = list(api.select_lambda(fit, anc, (1.0, 10.0)))
+        case['inside'] = {
+            f'{k}>{l}': api.inside_mask(w, k, l, times) for k in range(K) for l in range(K) if k != l
+        }
+        errs = api.map_errors(w, gmap)
+        case['map_errors'] = {f'{k}>{l}': v for (k, l), v in errs.items()}
+        case['map_errors_some'] = {
+            f'{k}>{l}': v for (k, l), v in api.map_errors(w, gmap, [(0, 1), (2, 0)]).items()
+        }
+        case['summarise'] = [api.summarise(errs, set(map(tuple, topo['chain']))), api.summarise({}, set())]
+        case['cycle'] = list(api.cycle_inconsistency(w, gmap))
+        wts = np.where(rng.random(len(bad)) < 0.3, 0.0, rng.random(len(bad)))
+        case['rejection'] = [list(api.rejection(wts, bad)), list(api.rejection(wts, np.zeros(len(bad), bool)))]
+        out[f'k{K}_s{seed}'] = case
     return out

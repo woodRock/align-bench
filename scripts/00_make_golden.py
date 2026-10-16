@@ -4,7 +4,7 @@ Run once per upstream pin, in the alignbench venv with the [golden] extra instal
 environment with editable upstream checkouts):
 
     .venv/bin/python -m pip install -e ".[golden]"
-    .venv/bin/python scripts/00_make_golden.py
+    .venv/bin/python scripts/00_make_golden.py [warpalign|jointalign|trustalign ...]
 
 Fixtures are per platform (tests/golden/<pkg>_<commit8>.<system>-<machine>.npz): BLAS differs
 between macOS (Accelerate) and Linux (OpenBLAS) in the last bits. CI's golden job uploads the
@@ -37,17 +37,27 @@ def commit(dist: str) -> str:
     return vcs['commit_id']
 
 
-def main() -> None:
+# fixture stem → (distribution whose commit names it, case builder, upstream API)
+FIXTURES = {
+    'warpalign': ('warpalign', golden.build_warpalign, golden.upstream_api),
+    'jointalign': ('joint-align', golden.build_jointalign, golden.upstream_api_m2),
+    'trustalign': ('trustalign', golden.build_trustalign, golden.upstream_api_m2),
+}
+
+
+def main(which: list[str]) -> None:
     out = TESTS / 'golden'
     out.mkdir(exist_ok=True)
-    rev = commit('warpalign')
-    flat = golden.flatten(golden.build_warpalign(golden.upstream_api()))
-    flat['#source'] = np.array(f'warpalign@{rev}')
-    flat['#env'] = np.array(golden.environment())
-    path = out / f'warpalign_{rev[:8]}.{golden.platform_tag()}.npz'
-    np.savez_compressed(path, **flat)
-    print(f'{path.relative_to(TESTS.parent)}: {len(flat)} arrays from warpalign@{rev}')
+    for stem in which or FIXTURES:
+        dist, build, api = FIXTURES[stem]
+        rev = commit(dist)
+        flat = golden.flatten(build(api()))
+        flat['#source'] = np.array(f'{dist}@{rev}')
+        flat['#env'] = np.array(golden.environment())
+        path = out / f'{stem}_{rev[:8]}.{golden.platform_tag()}.npz'
+        np.savez_compressed(path, **flat)
+        print(f'{path.relative_to(TESTS.parent)}: {len(flat)} arrays from {dist}@{rev}')
 
 
 if __name__ == '__main__':
-    main()
+    main(sys.argv[1:])  # fixture stems to regenerate (default: all)

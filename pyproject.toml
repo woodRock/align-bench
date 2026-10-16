@@ -91,3 +91,6 @@ check_untyped_defs = true
 warn_unused_ignores = true
 warn_redundant_casts = true
 no_implicit_optional = true
+
+[tool.ruff.format]
+quote-style = "preserve"  # as warpalign: single quotes in code, double in docstrings
