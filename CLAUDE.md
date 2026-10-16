@@ -99,8 +99,10 @@ Jesse's real-data `../joint-align/results/fair_benchmark.npz` (also 60/60 bit-id
 
 - Package and import name `alignbench`; GitHub repo `woodRock/align-bench`.
 - Headline protocol for real data is **B-frame** (`tic_bframe`); midpoint is reported alongside.
-- MTBLS21/MTBLS288 loaders come in their own milestone **after M4**. The dataset registry and
-  loader interface are built in M1 so third parties can add datasets without touching the core.
+- MTBLS21/MTBLS288 loaders: **not planned** (Jesse, 2026-10-17). Both are single instrument
+  sequences, not multi-batch studies: MTBLS288 ran 18–19 Dec 2013 (~32 h), MTBLS21 14–17 Mar 2008
+  (~2.5 days; harvest years 2005/2006 and the `_run02` repeats are all one sequence, per the
+  netCDF `experiment_date_time_stamp`). The dataset registry lets anyone add a loader later.
 - Citable synthetic benchmark: undecided. Until then, give every synthetic dataset a version ID
   (e.g. `synthetic:k5@1`) and decide on freezing before M4.
 - trust-align may migrate in M5 with the others: Experiment 1 is finished (Jesse, 2026-10-17).
