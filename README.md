@@ -15,7 +15,7 @@ compared like for like.
 
 ```bash
 python3.11 -m venv .venv
-.venv/bin/pip install "alignbench @ git+https://github.com/woodRock/alignbench.git"
+.venv/bin/pip install "alignbench @ git+https://github.com/woodRock/align-bench.git"
 ```
 
 Development: `make venv && make check`.

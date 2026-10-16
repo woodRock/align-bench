@@ -34,7 +34,7 @@ golden = [
 ]
 
 [project.urls]
-Repository = "https://github.com/woodRock/alignbench"
+Repository = "https://github.com/woodRock/align-bench"
 
 [tool.setuptools.packages.find]
 where = ["src"]

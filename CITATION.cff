@@ -4,7 +4,7 @@ title: "alignbench: shared core and benchmark for GC-MS retention-time alignment
 type: software
 version: 0.1.0.dev0
 license: MIT
-repository-code: "https://github.com/woodRock/alignbench"
+repository-code: "https://github.com/woodRock/align-bench"
 authors:
   - family-names: Wood
     given-names: Jesse

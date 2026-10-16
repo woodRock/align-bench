@@ -48,7 +48,7 @@ expanded under `nohup`). Markers: `slow` (end-to-end) and `real` (needs the priv
 
 ## Decisions (from Jesse, 2026-10-17)
 
-- Name stays `alignbench` (repo `woodRock/alignbench`).
+- Package and import name `alignbench`; GitHub repo `woodRock/align-bench`.
 - Headline protocol for real data is **B-frame** (`tic_bframe`); midpoint is reported alongside.
 - MTBLS21/MTBLS288 loaders come in their own milestone **after M4**. The dataset registry and
   loader interface are built in M1 so third parties can add datasets without touching the core.
