@@ -6,8 +6,10 @@ environment with editable upstream checkouts):
     .venv/bin/python -m pip install -e ".[golden]"
     .venv/bin/python scripts/00_make_golden.py
 
-Each fixture holds the flattened outputs of tests/golden.py's case builder run against the
-upstream functions, plus the upstream commit it came from ('#source') and the platform and
+Fixtures are per platform (tests/golden/<pkg>_<commit8>.<system>-<machine>.npz): BLAS differs
+between macOS (Accelerate) and Linux (OpenBLAS) in the last bits. CI's golden job uploads the
+Linux one as an artifact. Each fixture holds the flattened outputs of tests/golden.py's case
+builder run against the upstream functions, plus the upstream commit it came from ('#source') and the platform and
 numeric library versions it was computed with ('#env').
 """
 
@@ -42,7 +44,7 @@ def main() -> None:
     flat = golden.flatten(golden.build_warpalign(golden.upstream_api()))
     flat['#source'] = np.array(f'warpalign@{rev}')
     flat['#env'] = np.array(golden.environment())
-    path = out / f'warpalign_{rev[:8]}.npz'
+    path = out / f'warpalign_{rev[:8]}.{golden.platform_tag()}.npz'
     np.savez_compressed(path, **flat)
     print(f'{path.relative_to(TESTS.parent)}: {len(flat)} arrays from warpalign@{rev}')
 

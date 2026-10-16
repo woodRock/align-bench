@@ -54,7 +54,7 @@ methods/tic, metrics/{tic,stats,diagnostics}; the rest is the target of M2–M4)
 
 `tests/golden.py` holds one case builder (`build_warpalign(api)`) and two APIs mapping the same
 names to the pinned upstream functions or to alignbench's. `scripts/00_make_golden.py` runs it
-against upstream and writes `tests/golden/<pkg>_<commit8>.npz` (flattened outputs, `#source`
+against upstream and writes `tests/golden/<pkg>_<commit8>.<system>-<machine>.npz` (one per platform: macOS and Linux BLAS differ in the last bits; CI uploads the Linux one as an artifact) (flattened outputs, `#source`
 commit, `#env` platform + numpy/scipy/sklearn versions). `tests/test_golden.py` runs it against
 alignbench and compares with `np.array_equal`, dtype and shape included. Bit-identity is only
 expected on the platform and versions in `#env`; CI pins the versions with

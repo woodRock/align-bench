@@ -23,6 +23,10 @@ import numpy as np
 import synth
 
 
+def platform_tag() -> str:
+    return f'{platform.system()}-{platform.machine()}'.lower()
+
+
 def environment() -> str:
     """Platform and numeric library versions: bit-identity is only expected within one."""
     libs = ' '.join(f'{d}={version(d)}' for d in ('numpy', 'scipy', 'scikit-learn'))
@@ -60,14 +64,19 @@ def flatten(obj, prefix: str = '', out: dict | None = None) -> dict[str, np.ndar
     return out
 
 
-def compare(got: dict[str, np.ndarray], want: dict[str, np.ndarray]) -> list[str]:
-    """Every key whose value differs (missing, extra, dtype, shape or any element)."""
+def compare(got: dict[str, np.ndarray], want: dict[str, np.ndarray], float_atol: float = 0.0) -> list[str]:
+    """Every key whose value differs (missing, extra, dtype, shape or any element). float_atol > 0
+    only for comparisons across platforms (see test_golden.py); integers and strings are always
+    compared exactly."""
     bad = [f'missing: {k}' for k in sorted(set(want) - set(got))]
     bad += [f'extra: {k}' for k in sorted(set(got) - set(want))]
     for k in sorted(set(got) & set(want)):
         g, w = np.asarray(got[k]), np.asarray(want[k])
         if g.dtype != w.dtype or g.shape != w.shape:
             bad.append(f'{k}: {g.dtype}{g.shape} != {w.dtype}{w.shape}')
+        elif g.dtype.kind in 'fc' and float_atol > 0:
+            if not np.allclose(g, w, rtol=0.0, atol=float_atol, equal_nan=True):
+                bad.append(f'{k}: max |diff| {np.nanmax(np.abs(g - w)):.3g} > {float_atol}')
         elif not np.array_equal(g, w, equal_nan=g.dtype.kind in 'fc'):
             bad.append(f'{k}: values differ')
     return bad
