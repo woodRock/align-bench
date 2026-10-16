@@ -27,10 +27,24 @@ def platform_tag() -> str:
     return f'{platform.system()}-{platform.machine()}'.lower()
 
 
+def _blas() -> str:
+    """BLAS library, and for OpenBLAS the kernel it picked for this CPU and its thread count:
+    OpenBLAS chooses SIMD kernels per CPU model, so last bits differ between CI runners."""
+    name = np.__config__.CONFIG['Build Dependencies']['blas']['name']
+    try:
+        from threadpoolctl import threadpool_info
+
+        info = [i for i in threadpool_info() if i.get('user_api') == 'blas']
+    except ImportError:  # pragma: no cover - threadpoolctl comes with scikit-learn
+        info = []
+    kern = ','.join(f'{i.get("architecture")}x{i.get("num_threads")}' for i in info)
+    return f'{name}[{kern}]' if kern else name
+
+
 def environment() -> str:
-    """Platform and numeric library versions: bit-identity is only expected within one."""
+    """Platform, BLAS and numeric library versions: bit-identity is only expected within one."""
     libs = ' '.join(f'{d}={version(d)}' for d in ('numpy', 'scipy', 'scikit-learn'))
-    return f'{platform.system()}-{platform.machine()} python={platform.python_version()} {libs}'
+    return f'{platform.system()}-{platform.machine()} blas={_blas()} python={platform.python_version()} {libs}'
 
 
 # ── Flattening and comparison ────────────────────────────────────────────────

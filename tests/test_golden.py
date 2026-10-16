@@ -1,10 +1,11 @@
 """Bit-identity with the pinned upstream functions (fixtures from scripts/00_make_golden.py).
 
 Fixtures are per platform: the same upstream code gives last-bit different floats on macOS
-(Accelerate BLAS) and Linux (OpenBLAS). On the platform that generated a fixture the comparison
-is np.array_equal; against other platforms' fixtures integers and strings must still be equal
-and floats agree within 1e-6 absolute (observed: ≤ 4e-7, in the float32 PCA of the silhouette).
-CI's golden job additionally compares against the live pinned upstream, strict on any platform.
+(Accelerate BLAS) and Linux (OpenBLAS), and OpenBLAS also differs between CPU models (it picks
+SIMD kernels per CPU). In the exact environment that generated a fixture (its '#env') the
+comparison is np.array_equal; against every fixture, integers and strings must be equal and
+floats agree within 1e-6 absolute (observed: ≤ 4e-7, in the float32 PCA of the silhouette).
+CI's golden job also compares against the live pinned upstream, strict on any machine.
 """
 
 from __future__ import annotations
@@ -37,10 +38,14 @@ def alignbench_outputs() -> dict[str, np.ndarray]:
 
 @pytest.fixture(scope='module')
 def native() -> dict[str, np.ndarray]:
-    """This platform's fixture."""
+    """This platform's fixture, if it was generated in exactly this environment (platform, BLAS
+    kernel and threads, library versions): only then are BLAS-dependent floats reproducible."""
     if golden.platform_tag() not in FIXTURES:
         pytest.skip(f'no golden fixture for {golden.platform_tag()} (have {sorted(FIXTURES)})')
-    return _load(FIXTURES[golden.platform_tag()])
+    fixture = _load(FIXTURES[golden.platform_tag()])
+    if str(fixture['#env']) != golden.environment():
+        pytest.skip(f'fixture env {fixture["#env"]} != this env {golden.environment()}')
+    return fixture
 
 
 def _group(d: dict, group: str) -> dict:
