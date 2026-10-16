@@ -19,8 +19,9 @@ would replace them with pinned commits. Never `pip install` into the global inte
 
 ```bash
 make venv                                         # python3.11 -m venv .venv + editable install [dev]
-make check                                        # lint + types + tests with coverage (≥ 90 %)
-.venv/bin/python -m pytest -m "not slow"          # fast suite
+make check                                        # lint + types + tests with coverage (≥ 90 %), no real data
+make test-fast                                    # not slow, not real: seconds
+make test-real                                    # private fish-oil data (~3 min; COW-TIC on every sample pair)
 .venv/bin/python -m pytest -m slow                # end-to-end runs on synthetic data
 .venv/bin/python -m pytest tests/test_x.py::test_name
 .venv/bin/python -m pip install -e ".[golden]"    # only to regenerate tests/golden/*.npz
@@ -30,7 +31,7 @@ Outside the venv, always call `python3.11` explicitly (`python3` is a zsh alias 
 expanded under `nohup`). Markers: `slow` (end-to-end) and `real` (needs the private data under
 `data/fish_oil`; skipped otherwise).
 
-## Architecture (M1–M3 done; runner and CLI are M4)
+## Architecture (M1–M4 done)
 
 - `axis.py`: `TimeAxis(n_bins, run_min, eval_start_min)`, `FISH_OIL_AXIS = (200, 45.0, 5.0)`. The
   time axis is a value, never a module global. Functions that used `N_BINS`/`BIN_MIN`/`EVAL_BINS`
@@ -67,7 +68,12 @@ expanded under `nohup`). Markers: `slow` (end-to-end) and `real` (needs the priv
   Study evaluation pairs: `meta['eval_pairs']` (fish oil + fishlike: joint-align's ten).
 - `datasets.fish_oil.load(root)` loads every `batch_*` dir sorted (joint-align's order, with
   aug2015); pass `BATCHES` for warpalign's four.
-- To come: `bench.py`, `cli.py`.
+- `bench.py`: CellSpec (method × dataset × seed × params × protocols; key = sha256 of the spec),
+  cells cached as `<out>/cells/<key>.json` (rows, provenance, axis, timing), `run` resumes,
+  `task_lines` for `--emit-tasks` (`task -G 0 -n ab:<label> alignbench cell …`; task-spooler has
+  no -q), `collect` → results.csv, `report` → report.txt + table.tex (deterministic; 3 decimals
+  for r, 2 for minutes by default, `--decimals`).
+- `cli.py`: `alignbench list|run|cell|report` (entry point in pyproject).
 
 ## Golden tests
 

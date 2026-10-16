@@ -33,6 +33,9 @@ golden = [
     "trustalign @ git+https://github.com/woodRock/trust-align.git@c7b3e42ae4f2031f6a33e649a378f35defb142b3",
 ]
 
+[project.scripts]
+alignbench = "alignbench.cli:main"
+
 [project.urls]
 Repository = "https://github.com/woodRock/align-bench"
 
