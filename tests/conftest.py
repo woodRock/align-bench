@@ -4,12 +4,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 import synth
 
 REPO = Path(__file__).resolve().parent.parent
 FISH_OIL = REPO / 'data' / 'fish_oil'  # private; a symlink to warp-align's data, never committed
+
+
+@pytest.fixture
+def rng():
+    return np.random.default_rng(1234)
 
 
 @pytest.fixture(scope='session')
