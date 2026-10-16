@@ -4,9 +4,13 @@ One fixture set per upstream package and commit: warpalign (M1), jointalign and 
 Fixtures are per platform: the same upstream code gives last-bit different floats on macOS
 (Accelerate BLAS) and Linux (OpenBLAS), and OpenBLAS also differs between CPU models (it picks
 SIMD kernels per CPU). In the exact environment that generated a fixture (its '#env') the
-comparison is np.array_equal; against every fixture, integers and strings must be equal and floats
-agree within 1e-6 absolute (observed: ≤ 4e-7, in the float32 PCA of the silhouette). CI's golden
-job also compares against the live pinned upstreams, strict on any machine.
+comparison is np.array_equal. Against every fixture, integers, strings, shapes and NaN positions
+must be equal (no discrete decision may differ: peaks, anchors, counts, nodes, lags) and floats
+agree within 1e-3 absolute, in bins or minutes. Observed across macOS/Linux: ≤ 2.5e-4 bins, in
+maps through sub-bin anchors, where the parabolic refinement divides by a small curvature of
+float32 fingerprint similarities and so amplifies last-bit BLAS differences (≤ 1e-6 relative to
+each array's scale); ≤ 2e-7 for everything warpalign computes. CI's golden job also compares
+against the live pinned upstreams, strict on any machine.
 """
 
 from __future__ import annotations
@@ -21,7 +25,7 @@ import golden
 
 GOLDEN = Path(__file__).parent / 'golden'
 META = ('#source', '#env')
-CROSS_PLATFORM_ATOL = 1e-6
+CROSS_PLATFORM_ATOL = 1e-3
 
 # stem → (pinned commit, case builder, alignbench API, upstream API)
 SETS = {
@@ -138,8 +142,8 @@ def test_compare_detects_a_one_ulp_change():
     changed[key] = fixture[key].copy()
     changed[key][100] = np.nextafter(changed[key][100], np.inf)
     assert golden.compare(changed, fixture) == [f'{key}: values differ']
-    assert golden.compare(changed, fixture, float_atol=1e-6) == []
+    assert golden.compare(changed, fixture, float_atol=CROSS_PLATFORM_ATOL) == []
     changed[key] = fixture[key].astype(np.float32)
     assert 'float32' in golden.compare(changed, fixture)[0]
-    changed[key] = fixture[key] + 1e-3
-    assert 'max |diff|' in golden.compare(changed, fixture, float_atol=1e-6)[0]
+    changed[key] = fixture[key] + 2e-3
+    assert 'max |diff|' in golden.compare(changed, fixture, float_atol=CROSS_PLATFORM_ATOL)[0]

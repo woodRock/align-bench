@@ -68,7 +68,8 @@ commit, `#env` platform + numpy/scipy/sklearn versions). `tests/test_golden.py` 
 alignbench and compares with `np.array_equal`, dtype and shape included. Bit-identity is only
 expected on the platform and versions in `#env`; CI pins the versions with
 `tests/golden/constraints.txt`, and its `golden` job also compares against the live pinned
-upstreams (strict on any platform). Adding a moved function = add its calls to the builder (both
+upstreams (strict on any platform). Across machines: integers/shapes/NaNs exact, floats within
+1e-3 (observed ≤ 2.5e-4 bins, from sub-bin refinement amplifying BLAS last bits). Adding a moved function = add its calls to the builder (both
 APIs), regenerate, commit the fixture. Synthetic inputs come from `tests/synth.py`; their digests
 are in the fixture, so a numpy RNG change fails loudly.
 
