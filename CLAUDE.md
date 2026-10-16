@@ -106,7 +106,22 @@ Jesse's real-data `../joint-align/results/fair_benchmark.npz` (also 60/60 bit-id
 - Citable synthetic benchmark: undecided. Until then, give every synthetic dataset a version ID
   (e.g. `synthetic:k5@1`) and decide on freezing before M4.
 - trust-align may migrate in M5 with the others: Experiment 1 is finished (Jesse, 2026-10-17).
-- Still to ask before M5: whether Red Herring should consume `alignbench.data`/`alignbench.anchors`.
+- Red Herring does **not** consume alignbench: it is species classification / open-set detection,
+  not an alignment problem (Jesse, 2026-10-17).
+
+## M5 (downstream adoption): PRs open, Jesse reviews, merges and tags
+
+Worked in git worktrees under `~/Desktop/m5/` with their own `.venv` (Jesse's checkouts and the
+global editable installs untouched). Every downstream pins the same alignbench commit.
+- joint-align 2.0 (branch `alignbench-2.0`, PR #4): re-exports + `jointalign/alignbench_plugin.py`
+  (joint, star, composed-pairwise, neural-joint); scripts 30/32 bit-identical to 1.1.0 except the
+  neural joint, whose CPU training is not run-to-run reproducible in 1.1.0 either. Site updated.
+- warpalign 3.0 (branch `alignbench-3.0`): `_compat.py` + deprecated shims + `warp-transformer`
+  plugin.
+- trust-align 0.2.0 (branch `alignbench-migration`, PR #1): pins joint-align's branch commit;
+  bump to the merged commit / v2.0.0 tag before merging.
+Merge order: joint-align → (bump trust-align pin) trust-align; warp-align independent. After a
+downstream PR merges, its worktree can be removed (`git worktree remove ~/Desktop/m5/<repo>`).
 
 ## Rules for this repo
 
