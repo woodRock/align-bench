@@ -127,6 +127,9 @@ def compute_cell(spec: CellSpec, study: Study | None = None) -> dict:
         if name in P.NEEDS_TRUTH and study.truth is None:
             skipped[name] = 'needs a synthetic study (truth)'
             continue
+        if name in P.NEEDS_BATCH_MAP and fit.per_sample:
+            skipped[name] = f'{spec.method} is per sample pair (no batch-level map)'
+            continue
         ctx: dict[str, Any] = {}
         if name in P.NEEDS_REFIT:
             if not method.needs_anchors:

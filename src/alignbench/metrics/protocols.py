@@ -261,6 +261,9 @@ PROTOCOLS: dict[str, Callable[..., list[dict]]] = {
 }
 NEEDS_TRUTH = frozenset({'map_error', 'cycle_inconsistency'})
 NEEDS_REFIT = frozenset({'heldout_anchor_error'})
+# Defined for batch-level maps only: the truth and the anchors' batch pairs have no single map per
+# batch pair when a method warps every sample pair separately (COW-TIC, icoshift, neural joint).
+NEEDS_BATCH_MAP = frozenset({'map_error', 'cycle_inconsistency', 'heldout_anchor_error'})
 
 
 def available() -> list[str]:
@@ -273,4 +276,6 @@ def run(name: str, study: Study, fit: Fit, **ctx) -> list[dict]:
         raise KeyError(f'unknown protocol {name!r}; available: {", ".join(available())}')
     if name in NEEDS_TRUTH and study.truth is None:
         raise ValueError(f'protocol {name!r} needs a study with truth (synthetic); {study.name!r} has none')
+    if name in NEEDS_BATCH_MAP and fit.per_sample:
+        raise ValueError(f'protocol {name!r} needs a batch-level map; {fit.method} is per sample pair')
     return PROTOCOLS[name](study, fit, **ctx)

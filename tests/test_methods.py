@@ -134,6 +134,9 @@ def test_other_protocols():
     assert -1 <= sil[0]['value'] <= 1
     cow = methods.get('cow-tic').fit(k3, None)
     assert np.isnan(P.run('silhouette', k3, cow, pairs=[(0, 1)])[0]['value'])
+    for name in ('map_error', 'cycle_inconsistency'):
+        with pytest.raises(ValueError, match='batch-level map'):
+            P.run(name, k3, cow)
     plain = Study(list(k3.batches))
     with pytest.raises(ValueError, match='needs a study with truth'):
         P.run('map_error', plain, fit)

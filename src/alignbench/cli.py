@@ -81,6 +81,7 @@ def cmd_list(a) -> int:
         if a.what == 'protocols':
             note = ' (synthetic: needs truth)' if name in P.NEEDS_TRUTH else ''
             note += ' (methods fitted to harvested anchors)' if name in P.NEEDS_REFIT else ''
+            note += ' (batch-level maps only)' if name in P.NEEDS_BATCH_MAP else ''
             note += ' (headline for real data)' if name == P.HEADLINE else ''
         print(name + note)
     return 0

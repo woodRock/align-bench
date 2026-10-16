@@ -152,6 +152,15 @@ def test_fixed_dataset_gets_no_seed_and_truth_protocols_skip(tmp_path, capsys):
     assert cell['study']['batches'] == sorted(synth.BATCH_SHIFTS)
 
 
+def test_per_sample_methods_skip_batch_map_protocols():
+    spec = bench.CellSpec('cow-tic', 'synthetic:k3', 0, ('tic_bframe', 'map_error', 'cycle_inconsistency'),
+                          {'slack': 5}, {'mz_bins': 300})
+    cell = bench.compute_cell(spec)
+    assert set(cell['skipped']) == {'map_error', 'cycle_inconsistency'}
+    assert 'per sample pair' in cell['skipped']['map_error']
+    assert {r['protocol'] for r in cell['rows']} == {'tic_bframe'}
+
+
 def test_report_needs_cells(tmp_path):
     with pytest.raises(FileNotFoundError, match='no cells'):
         bench.report(tmp_path)
