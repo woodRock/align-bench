@@ -109,19 +109,16 @@ Jesse's real-data `../joint-align/results/fair_benchmark.npz` (also 60/60 bit-id
 - Red Herring does **not** consume alignbench: it is species classification / open-set detection,
   not an alignment problem (Jesse, 2026-10-17).
 
-## M5 (downstream adoption): PRs open, Jesse reviews, merges and tags
+## M5 (downstream adoption): done 2026-10-17
 
-Worked in git worktrees under `~/Desktop/m5/` with their own `.venv` (Jesse's checkouts and the
-global editable installs untouched). Every downstream pins the same alignbench commit.
-- joint-align 2.0 (branch `alignbench-2.0`, PR #4): re-exports + `jointalign/alignbench_plugin.py`
-  (joint, star, composed-pairwise, neural-joint); scripts 30/32 bit-identical to 1.1.0 except the
-  neural joint, whose CPU training is not run-to-run reproducible in 1.1.0 either. Site updated.
-- warpalign 3.0 (branch `alignbench-3.0`): `_compat.py` + deprecated shims + `warp-transformer`
-  plugin.
-- trust-align 0.2.0 (branch `alignbench-migration`, PR #1): pins joint-align's branch commit;
-  bump to the merged commit / v2.0.0 tag before merging.
-Merge order: joint-align → (bump trust-align pin) trust-align; warp-align independent. After a
-downstream PR merges, its worktree can be removed (`git worktree remove ~/Desktop/m5/<repo>`).
+Merged and tagged: warpalign v3.0.0 (2411143; the WarpTransformer plugin), joint-align v2.0.0
+(132ecb4; joint/star/composed-pairwise/neural-joint plugins, site updated), trustalign v0.2.0
+(fc84fe6). All three pin alignbench 879510f. Jesse's global python3.11 has editable installs of all
+four repos (alignbench and the three installed with --no-deps). When alignbench changes in a way a
+downstream should follow: bump that repo's pin (and the others', so they stay on one commit) on a
+branch + PR, as before. Known reproducibility facts: the neural joint's CPU training is not
+run-to-run bit-reproducible; WarpTransformer calibration is, but differs between torch 2.7.1 (the
+published runs, and CI) and newer torch.
 
 ## Rules for this repo
 
