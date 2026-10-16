@@ -87,7 +87,7 @@ are in the fixture, so a numpy RNG change fails loudly.
 - No repo-relative paths (`Path(__file__).parents[…]`) and no environment variables: paths are
   explicit arguments. The CI `package` job imports from outside the checkout to catch this.
 - **`data/` is private and must never be committed or pushed** (the GitHub repo is public). Code is MIT.
-- **Do not commit, tag or push results**; Jesse does. Code commits go on branches.
+- **Do not commit, tag or push results**; Jesse does. Code commits for alignbench go straight to `main` (Jesse, 2026-10-17); the M5 changes to the other repositories still go through branches and PRs.
 - **Never edit an upstream package (warp-align, joint-align, trust-align) while one of Jesse's runs
   uses its editable install.** Check with Jesse or the repo's `logs/`. Don't touch those
   repositories at all before M5; trust-align not before Jesse says so.
