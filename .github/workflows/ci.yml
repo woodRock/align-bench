@@ -90,6 +90,14 @@ jobs:
       - name: Record upstream revisions
         run: python -c "import importlib.metadata as m; [print(d, m.distribution(d).read_text('direct_url.json')) for d in ('warpalign', 'joint-align', 'trustalign')]"
       - run: python -m pytest tests/test_golden.py -v -rs
+      # This platform's fixture, for committing when the pins or constraints change (see CLAUDE.md).
+      - if: always()
+        run: python scripts/00_make_golden.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: golden-fixtures-linux
+          path: tests/golden/*.npz
 
   package:
     name: Package (non-editable install)
