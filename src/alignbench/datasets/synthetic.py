@@ -229,7 +229,10 @@ def to_study(specs, chromas, tic_raws, truth: dict, name: str, axis: TimeAxis = 
 def make(batches=DEFAULT_BATCHES, seed: int = 0, axis: TimeAxis = FISH_OIL_AXIS, **world_kw) -> Study:
     """make_world as a Study with exact truth."""
     chromas, tic_raws, truth = make_world(batches, seed=seed, axis=axis, **world_kw)
-    meta = {'dataset': f'synthetic:fishlike@{VERSION}', 'seed': seed, **world_kw}
+    from .fish_oil import JOINT_PAIRS
+
+    meta = {'dataset': f'synthetic:fishlike@{VERSION}', 'seed': seed, **world_kw,
+            'eval_pairs': [list(p) for p in JOINT_PAIRS]}
     return to_study(batches, chromas, tic_raws, truth, 'synthetic:fishlike', axis, meta)
 
 

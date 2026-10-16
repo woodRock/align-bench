@@ -89,10 +89,12 @@ jobs:
       - run: pip install -e ".[dev,golden]" -c tests/golden/constraints.txt
       - name: Record upstream revisions
         run: python -c "import importlib.metadata as m; [print(d, m.distribution(d).read_text('direct_url.json')) for d in ('warpalign', 'joint-align', 'trustalign')]"
-      - run: python -m pytest tests/test_golden.py -v -rs
+      - run: python -m pytest tests/test_golden.py tests/test_protocols.py -v -rs
       # This platform's fixture, for committing when the pins or constraints change (see CLAUDE.md).
       - if: always()
         run: python scripts/00_make_golden.py
+      - if: always()
+        run: python scripts/01_make_fair_benchmark_reference.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:

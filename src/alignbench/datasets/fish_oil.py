@@ -18,7 +18,16 @@ from ..axis import FISH_OIL_AXIS, TimeAxis
 from ..data import Batch, Study
 from . import register
 
-BATCHES = ('batch_sep2015', 'batch_jan2016', 'batch_apr2016', 'batch_jul2016')
+BATCHES = ('batch_sep2015', 'batch_jan2016', 'batch_apr2016', 'batch_jul2016')  # warpalign's four
+# joint-align's ten evaluation pairs (A warped into B's frame; scripts 30 and 32). The first six follow
+# cow-dcnn; aug2015 (2 samples) is A.
+JOINT_PAIRS = (
+    ('batch_sep2015', 'batch_jul2016'), ('batch_sep2015', 'batch_apr2016'),
+    ('batch_jan2016', 'batch_apr2016'), ('batch_jan2016', 'batch_jul2016'),
+    ('batch_sep2015', 'batch_jan2016'), ('batch_apr2016', 'batch_jul2016'),
+    ('batch_aug2015', 'batch_sep2015'), ('batch_aug2015', 'batch_jan2016'),
+    ('batch_aug2015', 'batch_apr2016'), ('batch_aug2015', 'batch_jul2016'),
+)
 EVAL_PAIRS = (
     ('batch_sep2015', 'batch_jul2016'),
     ('batch_sep2015', 'batch_apr2016'),
@@ -82,14 +91,25 @@ def load_batch(name: str, root: Path, axis: TimeAxis = FISH_OIL_AXIS) -> Batch:
     )
 
 
-def load(root: Path, batches: tuple[str, ...] = BATCHES, axis: TimeAxis = FISH_OIL_AXIS) -> Study:
-    """The fish-oil study from <root>/<batch>/chroma for each batch (default: the four batches of
-    the paper analyses, in BATCHES order)."""
+def batch_dirs(root: Path) -> tuple[str, ...]:
+    """Every <root>/batch_* directory, sorted by name (joint-align's batch order and indices)."""
+    return tuple(sorted(p.name for p in Path(root).glob('batch_*') if p.is_dir()))
+
+
+def load(root: Path, batches: tuple[str, ...] | None = None, axis: TimeAxis = FISH_OIL_AXIS) -> Study:
+    """The fish-oil study from <root>/<batch>/chroma (default: every batch_* directory, sorted, as
+    joint-align loads them; pass BATCHES for warpalign's four). Evaluation pairs: JOINT_PAIRS."""
+    from ..provenance import display_path
+
+    batches = batch_dirs(root) if batches is None else tuple(batches)
+    if not batches:
+        raise FileNotFoundError(f'no batch_* directories in {root}')
     return Study(
         [load_batch(b, root, axis) for b in batches],
         axis=axis,
         name='fish_oil',
-        meta={'dataset': 'fish_oil', 'root': str(Path(root).resolve()), 'batches': list(batches)},
+        meta={'dataset': 'fish_oil', 'root': display_path(root), 'batches': list(batches),
+              'eval_pairs': [list(p) for p in JOINT_PAIRS]},
     )
 
 

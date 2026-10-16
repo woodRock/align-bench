@@ -27,8 +27,9 @@ def both(fish_oil_root):
 
 def test_loader_matches_warpalign(both):
     _, ours, theirs = both
-    for b in ours.batches:
-        t = theirs[b.name]
+    assert set(theirs) < set(ours.batch_names)  # ours also loads batch_aug2015 (joint-align's five)
+    for name, t in theirs.items():
+        b = ours[name]
         assert np.array_equal(b.chromas, t.chromas) and np.array_equal(b.tic_raw, t.tic_raw)
         assert b.sample_ids == t.sample_ids
 

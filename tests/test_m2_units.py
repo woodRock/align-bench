@@ -13,6 +13,7 @@ from alignbench.anchors import POOLED, Anchors
 from alignbench.axis import TimeAxis
 from alignbench.data import Batch, Study
 from alignbench.datasets import synthetic as syn
+from alignbench.datasets.fish_oil import batch_dirs as fish_oil_dirs
 from alignbench.metrics import anchors as manchors
 from alignbench.metrics import truth as mtruth
 
@@ -125,6 +126,7 @@ def test_fishlike_study_and_disk_round_trip(tmp_path):
     truth = syn.make_dataset(tmp_path, **kw)
     assert truth == study.truth.truth
     disk = datasets.load('fish_oil', root=tmp_path, batches=study.batch_names)
+    assert fish_oil_dirs(tmp_path) == tuple(sorted(study.batch_names))
     for b, d in zip(study.batches, disk.batches):
         assert np.array_equal(b.chromas, d.chromas) and b.sample_ids == d.sample_ids
     syn.make_dataset(tmp_path, **kw)  # rewriting replaces the old files

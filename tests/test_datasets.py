@@ -13,7 +13,8 @@ from alignbench.datasets import fish_oil
 def test_fish_oil_loader_reads_the_written_format(tmp_path):
     arrays = synth.write_dataset(tmp_path)
     study = datasets.load('fish_oil', root=tmp_path)
-    assert study.batch_names == fish_oil.BATCHES and study.meta['dataset'] == 'fish_oil'
+    assert study.batch_names == tuple(sorted(fish_oil.BATCHES)) and study.meta['dataset'] == 'fish_oil'
+    assert study.meta['root'].endswith(tmp_path.name)
     for b in study.batches:
         chromas, raws = arrays[b.name]
         assert np.array_equal(b.chromas, chromas) and np.array_equal(b.tic_raw, raws)
@@ -25,6 +26,8 @@ def test_fish_oil_loader_reads_the_written_format(tmp_path):
 def test_fish_oil_loader_errors(tmp_path):
     with pytest.raises(FileNotFoundError):
         fish_oil.load_batch('batch_sep2015', tmp_path)
+    with pytest.raises(FileNotFoundError, match='no batch_'):
+        fish_oil.load(tmp_path)
     d = tmp_path / 'b' / 'chroma'
     d.mkdir(parents=True)
     np.savez(d / 's.npz', chroma=np.zeros((200, 3), np.float32))

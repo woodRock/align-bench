@@ -30,7 +30,7 @@ Outside the venv, always call `python3.11` explicitly (`python3` is a zsh alias 
 expanded under `nohup`). Markers: `slow` (end-to-end) and `real` (needs the private data under
 `data/fish_oil`; skipped otherwise).
 
-## Architecture (M1 + M2 done; methods registry, protocols, runner and CLI are M3–M4)
+## Architecture (M1–M3 done; runner and CLI are M4)
 
 - `axis.py`: `TimeAxis(n_bins, run_min, eval_start_min)`, `FISH_OIL_AXIS = (200, 45.0, 5.0)`. The
   time axis is a value, never a module global. Functions that used `N_BINS`/`BIN_MIN`/`EVAL_BINS`
@@ -56,8 +56,18 @@ expanded under `nohup`). Markers: `slow` (end-to-end) and `real` (needs the priv
   `metrics/anchors.py` (RT-block folds, held-out error, λ selection).
 - `provenance.py`: one implementation from `direct_url.json` (pinned git+ / editable checkout /
   installed); `header()` = alignbench + plugin distributions + extras + environment.
-- To come: `methods/` (`Aligner`, `Fit`, registry, built-ins), `metrics/protocols.py`
-  (B-frame, midpoint), `bench.py`, `cli.py`.
+- `methods/`: `Fit` and the `Aligner` protocol (`base.py`), registry + `alignbench.methods` entry
+  points (`__init__.py`), built-ins (`builtins.py`): unaligned, constant-shift, linear,
+  pooled-pchip (pooled anchors per ordered pair, lazily: g(k, l) uses match_pooled(study[l],
+  study[k])), composed-pchip (harvested anchors), cow-tic and icoshift (per sample pair, `i`, `j`).
+- `metrics/protocols.py`: tic_bframe (headline) and tic_midpoint = joint-align
+  `32_fair_benchmark.py`'s score() (unmasked r via warpalign `pearson`, constant → 0; masked r via
+  `pearson_paired`), plus map_error, cycle_inconsistency, heldout_anchor_error (needs anchors +
+  refit), warp_magnitude, silhouette; all return tidy rows; `run(name, study, fit, **ctx)`.
+  Study evaluation pairs: `meta['eval_pairs']` (fish oil + fishlike: joint-align's ten).
+- `datasets.fish_oil.load(root)` loads every `batch_*` dir sorted (joint-align's order, with
+  aug2015); pass `BATCHES` for warpalign's four.
+- To come: `bench.py`, `cli.py`.
 
 ## Golden tests
 
@@ -72,6 +82,12 @@ upstreams (strict on any platform). Across machines: integers/shapes/NaNs exact,
 1e-3 (observed ≤ 2.5e-4 bins, from sub-bin refinement amplifying BLAS last bits). Adding a moved function = add its calls to the builder (both
 APIs), regenerate, commit the fixture. Synthetic inputs come from `tests/synth.py`; their digests
 are in the fixture, so a numpy RNG change fails loudly.
+
+M3 acceptance: `scripts/01_make_fair_benchmark_reference.py` runs joint-align's scripts 00 → 30 →
+32 at the pinned commit on synthetic data (temporary checkout, ~1 min) and keeps the Unaligned /
+Pooled PCHIP / COW-TIC arrays as `tests/golden/fair32_842ca595.<platform>.npz`;
+`tests/test_protocols.py` compares (all 60 arrays bit-identical), and, when present, against
+Jesse's real-data `../joint-align/results/fair_benchmark.npz` (also 60/60 bit-identical).
 
 ## Decisions (from Jesse, 2026-10-17)
 
